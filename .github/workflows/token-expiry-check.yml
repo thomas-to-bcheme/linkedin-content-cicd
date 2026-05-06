@@ -1,0 +1,87 @@
+name: Check LinkedIn Token Expiry
+
+on:
+  schedule:
+    - cron: '0 16 * * 1'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check token age
+        id: expiry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TOKEN_FILE=".github/linkedin-token-issued.txt"
+
+          if [ ! -f "$TOKEN_FILE" ]; then
+            echo "alert=true" >> $GITHUB_OUTPUT
+            echo "subject=LinkedIn token: no issue date recorded" >> $GITHUB_OUTPUT
+            echo "body=Create .github/linkedin-token-issued.txt with the date you generated your LinkedIn access token (YYYY-MM-DD format)." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          ISSUED=$(cat "$TOKEN_FILE" | tr -d '[:space:]')
+          ISSUED_TS=$(date -d "$ISSUED" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$ISSUED" +%s 2>/dev/null)
+          NOW_TS=$(date +%s)
+          DAYS_OLD=$(( (NOW_TS - ISSUED_TS) / 86400 ))
+          DAYS_LEFT=$(( 60 - DAYS_OLD ))
+
+          echo "Token issued: $ISSUED ($DAYS_OLD days ago, $DAYS_LEFT days remaining)"
+
+          if [ "$DAYS_LEFT" -le 7 ]; then
+            echo "alert=true" >> $GITHUB_OUTPUT
+            echo "days_left=$DAYS_LEFT" >> $GITHUB_OUTPUT
+            echo "issued=$ISSUED" >> $GITHUB_OUTPUT
+          else
+            echo "alert=false" >> $GITHUB_OUTPUT
+            echo "Token still valid. No action needed."
+          fi
+
+      - name: Send email notification
+        if: steps.expiry.outputs.alert == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.GMAIL_ADDRESS }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: "LinkedIn token expiring in ${{ steps.expiry.outputs.days_left }} days"
+          to: ${{ secrets.GMAIL_ADDRESS }}
+          from: ${{ secrets.GMAIL_ADDRESS }}
+          body: |
+            Your LinkedIn access token was issued on ${{ steps.expiry.outputs.issued }} and expires in ${{ steps.expiry.outputs.days_left }} days.
+
+            To rotate:
+            1. Go to https://www.linkedin.com/developers/tools/oauth/token-generator
+            2. Select your app, check w_member_social + openid + profile
+            3. Click "Request access token"
+            4. Update the LINKEDIN_ACCESS_TOKEN secret in your repo Settings > Secrets
+            5. Update .github/linkedin-token-issued.txt with today's date and push
+
+      - name: Create GitHub issue
+        if: steps.expiry.outputs.alert == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING=$(gh issue list --search "LinkedIn token expiring" --state open --json number --jq '.[0].number')
+          if [ -z "$EXISTING" ]; then
+            gh issue create \
+              --title "LinkedIn token expiring in ${{ steps.expiry.outputs.days_left }} days" \
+              --body "Your LinkedIn access token was issued on **${{ steps.expiry.outputs.issued }}** and expires in **${{ steps.expiry.outputs.days_left }} days**.
+
+          ## To rotate:
+          1. Go to https://www.linkedin.com/developers/tools/oauth/token-generator
+          2. Select your app, check \`w_member_social\` + \`openid\` + \`profile\`
+          3. Click Request access token
+          4. Update the \`LINKEDIN_ACCESS_TOKEN\` secret in this repo's Settings > Secrets
+          5. Update \`.github/linkedin-token-issued.txt\` with today's date and push" \
+              --label "maintenance"
+          else
+            echo "Issue #${EXISTING} already open, skipping."
+          fi

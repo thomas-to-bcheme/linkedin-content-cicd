@@ -348,7 +348,7 @@ After generating the article, save it to the drafts folder for review.
 
 ### File Location
 
-Save all generated articles to: `genAI/medium/drafts/`
+Save all generated articles to: `medium/drafts/`
 
 ### Naming Convention
 
@@ -381,7 +381,7 @@ estimated_read_time: 7 min
 
 ### Workflow Integration
 
-1. **Draft** (you are here) -- Skill saves output to `genAI/medium/drafts/`
+1. **Draft** (you are here) -- Skill saves output to `medium/drafts/`
 2. **Review** -- User reads, personalizes voice, adds images at `[IMAGE:]` placements, verifies references. Medium deprioritizes AI content, so personalization is critical
-3. **Validate** -- Move the final draft to `genAI/medium/validated/` when approved
-4. **Publish** -- Copy to Medium, apply suggested tags, add images. Move original to `genAI/medium/posted/`
+3. **Validate** -- Move the final draft to `medium/validated/` when approved
+4. **Publish** -- Copy to Medium, apply suggested tags, add images. Move original to `medium/posted/`

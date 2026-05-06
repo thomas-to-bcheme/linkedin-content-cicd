@@ -14,18 +14,18 @@ This is not a compiled software project — there are no build, test, or lint co
 skills/linkedin/SKILL.md                    # LinkedIn post generator (invoke with /linkedin)
 skills/medium/SKILL.md                      # Medium article generator (invoke with /medium)
 agents/content-reviewer.md                  # Draft review agent (validates posts against rules)
-genAI/linkedin/{drafts,validated,posted}/    # LinkedIn post lifecycle
-genAI/medium/{drafts,validated,posted}/      # Medium article lifecycle
+linkedin/{drafts,not-posted,validated,posted}/ # LinkedIn post lifecycle
+medium/{drafts,validated,posted}/             # Medium article lifecycle (manual publish)
 .claude/settings.json                        # Project permissions
 .claude/.mcp.json                            # MCP server configs (placeholder)
-.claude/rules/writing-style.md               # Writing rules applied to genAI/**/*.md
+.claude/rules/writing-style.md               # Writing rules applied to linkedin/**/*.md and medium/**/*.md
 .claude-plugin/plugin.json                   # Marketplace plugin manifest
 ```
 
 - **Skills** (`skills/`) — slash commands with YAML frontmatter (`name`, `description`, `allowed-tools`, `model`). Invoked via `/skill-name`.
 - **Agents** (`agents/`) — subagent definitions with tools, model, and system prompts. Spawned automatically or via Agent tool.
 - **Rules** (`.claude/rules/`) — path-scoped rules loaded when matching files are accessed.
-- **Generated content** saved under `genAI/<platform>/` with subfolders `drafts/`, `validated/`, `posted/`.
+- **Generated content** saved under `<platform>/` (e.g., `linkedin/`, `medium/`) with subfolders `drafts/`, `validated/`, `posted/`.
 - **Workflow**: Draft (`drafts/`) → Review → Validate (`validated/`) → Publish → Archive (`posted/`)
 
 ## Plugin Installation
