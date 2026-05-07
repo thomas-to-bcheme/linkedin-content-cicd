@@ -2,7 +2,9 @@ name: Post to LinkedIn
 
 on:
   schedule:
-    - cron: '0 23 * * 1-5'
+    - cron: '0 9 * * 1-5'
+      timezone: 'America/Los_Angeles'
+
   workflow_dispatch:
     inputs:
       dry_run:
@@ -24,20 +26,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install -r scripts/requirements.txt
-
       - name: Post to LinkedIn
         env:
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
-        run: python scripts/post-to-linkedin.py
+        run: python3 scripts/post-to-linkedin.py
 
       - name: Commit and push changes
         run: |
