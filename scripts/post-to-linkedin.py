@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Post the next queued LinkedIn post via the LinkedIn API."""
+"""Post the next LinkedIn post via the LinkedIn API."""
 
+import argparse
 import json
 import os
 import random
@@ -9,22 +10,8 @@ import sys
 import urllib.error
 import urllib.request
 
-QUEUE_PATH = "linkedin/.post-queue"
 NOT_POSTED_DIR = "linkedin/not-posted"
 POSTED_DIR = "linkedin/posted"
-
-
-def read_queue():
-    if not os.path.exists(QUEUE_PATH):
-        return []
-    with open(QUEUE_PATH, "r") as f:
-        return [line.strip() for line in f if line.strip()]
-
-
-def write_queue(slugs):
-    with open(QUEUE_PATH, "w") as f:
-        for slug in slugs:
-            f.write(slug + "\n")
 
 
 def get_post_files(directory):
@@ -34,11 +21,10 @@ def get_post_files(directory):
 
 
 def recycle_posts():
-    """Move all posts from posted/ back to not-posted/ in randomized order."""
+    """Move all posts from posted/ back to not-posted/."""
     posted_files = get_post_files(POSTED_DIR)
     if not posted_files:
-        print("Both not-posted/ and posted/ are empty. Nothing to recycle.")
-        return []
+        return False
 
     print(f"Recycling {len(posted_files)} posts from posted/ back to not-posted/")
     os.makedirs(NOT_POSTED_DIR, exist_ok=True)
@@ -48,22 +34,11 @@ def recycle_posts():
         dst = os.path.join(NOT_POSTED_DIR, filename)
         shutil.move(src, dst)
 
-    slugs = [f.replace(".md", "") for f in posted_files]
-    random.shuffle(slugs)
-    write_queue(slugs)
-    print(f"New randomized queue: {len(slugs)} posts")
-    return slugs
+    return True
 
 
-def post_to_linkedin(text, access_token, person_urn, visibility="PUBLIC"):
-    url = "https://api.linkedin.com/rest/posts"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-        "X-Restli-Protocol-Version": "2.0.0",
-        "LinkedIn-Version": "202604",
-    }
-    payload = {
+def build_payload(text, person_urn, visibility="PUBLIC"):
+    return {
         "author": person_urn,
         "commentary": text,
         "visibility": visibility,
@@ -74,6 +49,16 @@ def post_to_linkedin(text, access_token, person_urn, visibility="PUBLIC"):
         },
         "lifecycleState": "PUBLISHED",
         "isReshareDisabledByAuthor": False,
+    }
+
+
+def post_to_linkedin(payload, access_token):
+    url = "https://api.linkedin.com/rest/posts"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "LinkedIn-Version": "202604",
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -93,29 +78,30 @@ def post_to_linkedin(text, access_token, person_urn, visibility="PUBLIC"):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Post to LinkedIn")
+    parser.add_argument("--preview", action="store_true",
+                        help="Print API payload without making any API call")
+    args = parser.parse_args()
+
     dry_run = os.environ.get("DRY_RUN", "false").lower() == "true"
     access_token = os.environ.get("LINKEDIN_ACCESS_TOKEN", "")
     person_urn = os.environ.get("LINKEDIN_PERSON_URN", "")
 
-    if not access_token or not person_urn:
+    if not args.preview and (not access_token or not person_urn):
         print("ERROR: LINKEDIN_ACCESS_TOKEN and LINKEDIN_PERSON_URN must be set")
         sys.exit(1)
 
-    queue = read_queue()
+    files = get_post_files(NOT_POSTED_DIR)
+    if not files:
+        if not recycle_posts():
+            print("ERROR: No posts in not-posted/ or posted/. Nothing to publish.")
+            sys.exit(1)
+        files = get_post_files(NOT_POSTED_DIR)
 
-    if not queue or not get_post_files(NOT_POSTED_DIR):
-        queue = recycle_posts()
-        if not queue:
-            sys.exit(0)
-
-    slug = queue[0]
-    print(f"Next in queue: {slug}")
-
-    filepath = os.path.join(NOT_POSTED_DIR, f"{slug}.md")
-    if not os.path.exists(filepath):
-        print(f"WARNING: {filepath} not found. Removing from queue.")
-        write_queue(queue[1:])
-        sys.exit(0)
+    filename = random.choice(files)
+    slug = filename.replace(".md", "")
+    filepath = os.path.join(NOT_POSTED_DIR, filename)
+    print(f"Selected: {slug}")
 
     with open(filepath, "r") as f:
         body = f.read().strip()
@@ -126,26 +112,40 @@ def main():
         body = body[:3000]
 
     if dry_run:
-        print("=== DRY RUN (posting to CONNECTIONS only) ===")
-        success = post_to_linkedin(body, access_token, person_urn, visibility="CONNECTIONS")
-        if not success:
-            sys.exit(1)
-        print("Dry run complete. Queue and files unchanged.")
+        visibility = "CONNECTIONS"
+    else:
+        visibility = "PUBLIC"
+
+    payload = build_payload(body, person_urn or "preview-mode", visibility)
+    print("=== API PAYLOAD ===")
+    print(json.dumps(payload, indent=2))
+    print("===================")
+
+    if args.preview:
+        print("Preview complete. No API call made.")
         return
 
-    success = post_to_linkedin(body, access_token, person_urn)
+    if dry_run:
+        print("=== DRY RUN (posting to CONNECTIONS only) ===")
+
+    success = post_to_linkedin(payload, access_token)
     if not success:
         sys.exit(1)
 
+    if dry_run:
+        print("Dry run complete. Files unchanged.")
+        return
+
     os.makedirs(POSTED_DIR, exist_ok=True)
-    dst = os.path.join(POSTED_DIR, f"{slug}.md")
+    dst = os.path.join(POSTED_DIR, filename)
     shutil.move(filepath, dst)
     print(f"Moved {filepath} -> {dst}")
 
-    write_queue(queue[1:])
     with open("linkedin/.post-queue.last", "w") as f:
         f.write(slug)
-    print(f"Done. {len(queue) - 1} posts remaining in queue.")
+
+    remaining = len(get_post_files(NOT_POSTED_DIR))
+    print(f"Done. {remaining} posts remaining in not-posted/.")
 
 
 if __name__ == "__main__":

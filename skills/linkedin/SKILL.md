@@ -200,15 +200,14 @@ Save all generated posts to: `linkedin/drafts/`
 
 ### Naming Convention
 
-Use this format: `YYYY-MM-DD-kebab-case-topic.md`
+Use this format: `kebab-case-topic.md`
 
-- Use today's date
 - Convert the topic to kebab-case (lowercase, hyphens instead of spaces)
 
 **Examples:**
-- `2026-01-27-constraint-driven-architecture.md`
-- `2026-01-27-github-as-data-warehouse.md`
-- `2026-01-27-rag-without-vector-db.md`
+- `constraint-driven-architecture.md`
+- `github-as-data-warehouse.md`
+- `rag-without-vector-db.md`
 
 ### File Structure
 
